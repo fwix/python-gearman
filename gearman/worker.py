@@ -6,6 +6,7 @@ from gearman import compat
 from gearman.connection_manager import GearmanConnectionManager
 from gearman.worker_handler import GearmanWorkerCommandHandler
 from gearman.errors import ConnectionError
+from gearman.constants import GEARMAN_JOB_NAME
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -190,7 +191,10 @@ class GearmanWorker(GearmanConnectionManager):
 
     def on_job_execute(self, current_job):
         try:
-            function_callback = self.worker_abilities[current_job.task]
+            if current_job.task in self.worker_abilities:
+                function_callback = self.worker_abilities[current_job.task]
+            else:
+                function_callback = self.worker_abilities[GEARMAN_JOB_NAME]
             job_result = function_callback(self, current_job)
         except Exception:
             return self.on_job_exception(current_job, sys.exc_info())

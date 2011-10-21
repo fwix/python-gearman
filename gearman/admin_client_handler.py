@@ -5,12 +5,13 @@ from gearman.command_handler import GearmanCommandHandler
 from gearman.errors import ProtocolError, InvalidAdminClientState
 from gearman.protocol import GEARMAN_COMMAND_ECHO_REQ, GEARMAN_COMMAND_TEXT_COMMAND, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, \
-    GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
+    GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN, GEARMAN_SERVER_COMMAND_THROTTLE, \
+    GEARMAN_SERVER_COMMAND_MEMSTATS
 
 gearman_logger = logging.getLogger(__name__)
 
 EXPECTED_GEARMAN_SERVER_COMMANDS = set([GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, \
-    GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN])
+    GEARMAN_SERVER_COMMAND_WORKERS, GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN, GEARMAN_SERVER_COMMAND_THROTTLE, GEARMAN_SERVER_COMMAND_THROTTLE, GEARMAN_SERVER_COMMAND_MEMSTATS])
 
 class GearmanAdminClientCommandHandler(GearmanCommandHandler):
     """Special GEARMAN_COMMAND_TEXT_COMMAND command handler that'll parse text responses from the server"""
@@ -41,7 +42,7 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         recv_response = self._recv_responses.popleft()
         return sent_command, recv_response
 
-    def send_text_command(self, command_line):
+    def send_text_command(self, command_line, function_name = None, throttle = None):
         """Send our administrative text command"""
         expected_server_command = None
         for server_command in EXPECTED_GEARMAN_SERVER_COMMANDS:
@@ -55,6 +56,8 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         self._sent_commands.append(expected_server_command)
 
         output_text = '%s\n' % command_line
+        if command_line == GEARMAN_SERVER_COMMAND_THROTTLE:
+            output_text = '%s\t%s\t%s\n' % (command_line, function_name, str(throttle))
         self.send_command(GEARMAN_COMMAND_TEXT_COMMAND, raw_text=output_text)
 
     def send_echo_request(self, echo_string):
@@ -88,6 +91,31 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         # This must match the parameter names as defined in the command handler
         completed_work = cmd_callback(raw_text)
         return completed_work
+
+    def recv_server_throttle(self, raw_text):
+        split_token = raw_text.split('\t')
+        function, throttle = split_token
+        status_dict = {}
+        status_dict['function'] = function
+        status_dict['throttle'] = throttle
+        self._recv_responses.append(status_dict)
+        return False
+    
+    def recv_server_memstats(self, raw_text):
+        if raw_text == '.':
+            output_response = tuple(self._status_response)
+            self._recv_responses.append(output_response)
+            self._status_response = []
+            return False
+        split_tokens = raw_text.split('\t')
+        memory, total_threads, active_threads, uptime = split_tokens
+        status_dict = {}
+        status_dict['MemUsed'] = int(memory)
+        status_dict['TotalThreads'] = int(total_threads)
+        status_dict['ActiveThreads'] = int(active_threads)
+        status_dict['UpTime'] = int(uptime)
+        self._recv_responses.append(status_dict)
+        return False
 
     def recv_server_status(self, raw_text):
         """Slowly assemble a server status message line by line"""
@@ -134,15 +162,22 @@ class GearmanAdminClientCommandHandler(GearmanCommandHandler):
         if len(split_tokens) < self.WORKERS_FIELDS:
             raise ProtocolError('Received %d tokens, expected >= 4 tokens: %r' % (len(split_tokens), split_tokens))
 
-        if split_tokens[3] != ':':
-            raise ProtocolError('Malformed worker response: %r' % (split_tokens, ))
+        #if split_tokens[5] != ':':
+        #    raise ProtocolError('Malformed worker response: %r' % (split_tokens, ))
 
         # Label our fields and make the results Python friendly
         worker_dict = {}
         worker_dict['file_descriptor'] = split_tokens[0]
         worker_dict['ip'] = split_tokens[1]
         worker_dict['client_id'] = split_tokens[2]
-        worker_dict['tasks'] = tuple(split_tokens[4:])
+        if split_tokens[3] == ':':
+            worker_dict['tasks']  = tuple(split_tokens[4:])
+        elif split_tokens[5] == ':':
+            worker_dict['start_time'] = split_tokens[3]
+            worker_dict['end_time'] = split_tokens[4]
+            worker_dict['tasks'] = tuple(split_tokens[6:])
+        else:
+            raise ProtocolError('Malformed worker response: %r' % (split_tokens, ))
         self._workers_response.append(worker_dict)
         return True
 

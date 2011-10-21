@@ -125,7 +125,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
         AWAITING_JOB -> EXECUTE_JOB -> SLEEP :: Always transition once we're given a job
         """
-        assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
+#        assert task in self._handler_abilities, '%s not found in %r' % (task, self._handler_abilities)
 
         # After this point, we know this connection handler is holding onto the job lock so we don't need to acquire it again
         if not self.connection_manager.check_job_lock(self):
@@ -142,6 +142,7 @@ class GearmanWorkerCommandHandler(GearmanCommandHandler):
 
         return True
 
+
     def recv_job_assign(self, job_handle, task, data):
         """JOB_ASSIGN and JOB_ASSIGN_UNIQ are essentially the same"""
-        return self.recv_job_assign(job_handle=job_handle, task=task, unique=None, data=data)
+        return self.recv_job_assign_uniq(job_handle=job_handle, task=task, unique=None, data=data)

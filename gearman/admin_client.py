@@ -8,7 +8,7 @@ from gearman.admin_client_handler import GearmanAdminClientCommandHandler
 from gearman.errors import ConnectionError, InvalidAdminClientState, ServerUnavailable
 from gearman.protocol import GEARMAN_COMMAND_ECHO_RES, GEARMAN_COMMAND_ECHO_REQ, \
     GEARMAN_SERVER_COMMAND_STATUS, GEARMAN_SERVER_COMMAND_VERSION, GEARMAN_SERVER_COMMAND_WORKERS, \
-    GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN
+    GEARMAN_SERVER_COMMAND_MAXQUEUE, GEARMAN_SERVER_COMMAND_SHUTDOWN, GEARMAN_SERVER_COMMAND_THROTTLE,GEARMAN_SERVER_COMMAND_MEMSTATS
 
 gearman_logger = logging.getLogger(__name__)
 
@@ -75,6 +75,16 @@ class GearmanAdminClient(GearmanConnectionManager):
         self.establish_admin_connection()
         self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_STATUS)
         return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_STATUS)
+
+    def put_throttle(self, function_name, throttle):
+        self.establish_admin_connection()
+        self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_THROTTLE, function_name, throttle)
+        return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_THROTTLE)
+
+    def get_memstats(self):
+        self.establish_admin_connection()
+        self.current_handler.send_text_command(GEARMAN_SERVER_COMMAND_MEMSTATS)
+        return self.wait_until_server_responds(GEARMAN_SERVER_COMMAND_MEMSTATS)
 
     def get_version(self):
         """Retrieves the version number of the Gearman server"""

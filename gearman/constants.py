@@ -10,3 +10,5 @@ JOB_PENDING  = 'PENDING'  # Request has been submitted, pending handle
 JOB_CREATED  = 'CREATED'  # Request has been accepted
 JOB_FAILED   = 'FAILED'   # Request received an explicit fail
 JOB_COMPLETE = 'COMPLETE' # Request received an explicit complete
+
+GEARMAN_JOB_NAME = 'gm_task'
